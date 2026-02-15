@@ -215,6 +215,8 @@ import { Download, CheckCircle, FileSpreadsheet } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FileUpload } from '@/components/file-upload'
+import { supabase } from '@/lib/supabase'
+import { json } from 'node:stream/consumers'
 
 export default function BulkPredictionPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -222,6 +224,9 @@ export default function BulkPredictionPage() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null)
   const [processedCount, setProcessedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  const [name, setName] = useState('')
+  const [filePath, setFilePath] = useState('')
 
   const handleUpload = async () => {
     if (!file) return
@@ -238,9 +243,77 @@ export default function BulkPredictionPage() {
         'http://127.0.0.1:8000/predict-batch',
         formData,
         { responseType: 'blob' }
+        
       )
 
       setResultBlob(response.data)
+
+      // to save download path to supbase 
+      const url = URL.createObjectURL(response.data)
+      console.log(url)
+    
+      setFilePath(url)
+      const now = new Date()
+      const formattedTimestamp = now
+        .toLocaleString('en-CA', {
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',   // ✅ added seconds
+          hour12: true,
+        })
+        .replace(',', '')
+        .replace(/ /g, '_')
+        .replace(/:/g, '-')    // ✅ replace ":" to avoid URL issues
+
+      const fileName = `${formattedTimestamp}_employee_attrition_predictions.csv`
+      setName(fileName)
+      
+      // storage  +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+      const predictionBlob = new Blob(
+          [response.data],
+          { type: 'text/csv' }
+      )
+      console.log(predictionBlob)
+      const csvText = await predictionBlob.text()
+
+const rows = csvText
+  .split('\n')
+  .map(row => row.trim())
+  .filter(row => row !== '')
+
+const header = rows[0]
+const firstRecord = rows[1]
+
+console.log('Header:', header)
+console.log('First Record:', firstRecord)
+
+
+    // Generate unique filenames
+    const predictionPath = `/predictions/${fileName}`
+
+    // 3️⃣ Upload prediction CSV to Supabase
+    const {data, error: uploadPredictionError } = await supabase.storage
+      .from('bulk_predictions')
+      .upload(predictionPath, predictionBlob ,{
+        contentType: 'text/csv',
+        upsert: true
+      })
+
+    console.log("DATA:", data)
+    console.log("ERROR:", error)
+    // 4️⃣ Store metadata in DB
+    await supabase.from('bulk_predictions_metadata').insert({
+      file_name:fileName,
+      file_path: predictionPath,
+      file_size: predictionBlob.size,
+      hr_user_id:JSON.parse(localStorage.getItem('data')).id
+    })
+
+
+      //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
       // count rows (excluding header)
       const text = await file.text()
@@ -270,12 +343,16 @@ export default function BulkPredictionPage() {
     const url = URL.createObjectURL(resultBlob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'attrition_predictions.csv'
+    a.download = name
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
+
+  // testing new upload handler ==================================================================
+
+  // =============================================================================================
 
   const handleReset = () => {
     setFile(null)
@@ -378,7 +455,7 @@ export default function BulkPredictionPage() {
           <CardContent className="flex justify-between items-center">
             <div className="flex items-center gap-3">
               <FileSpreadsheet />
-              <span>attrition_predictions.csv</span>
+              <span>{name}</span>
             </div>
             <Button onClick={handleDownload}>
               <Download className="mr-2 h-4 w-4" />

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { FormInput } from '@/components/form-input'
 import { ResultCard } from '@/components/result-card'
+import { supabase } from '@/lib/supabase'
 
 const businessTravelOptions = [
   { label: 'Travel Rarely', value: '0' },
@@ -67,6 +68,7 @@ export default function PredictSinglePage() {
   const [formData, setFormData] = useState(initialFormData);
   const [prediction, setPrediction] = useState(null) ; // true or false for attrition
   const [isLoading, setIsLoading] = useState(false)
+  const [name, setName] = useState()
 
   const handleChange = (name: string, value: string | number) => {
     setFormData((prev) => ({ ...prev, [name]: Number(value) }))
@@ -82,15 +84,51 @@ export default function PredictSinglePage() {
       // setPrediction(result.prediction)
 
     const res = await axios.post("http://127.0.0.1:8000/predict", formData);
-    alert(`Prediction: ${res.data.prediction}\nRisk: ${res.data.attrition_risk_probability}`);
+    // alert(`Prediction: ${res.data.prediction}\nRisk: ${res.data.attrition_risk_probability}`);
     console.log('Prediction result:', res.data);
     setPrediction(res.data.prediction);
+
+
+    // supabase prediction save 
+    if(res.data.prediction !== null){
+      await saveToSupabase(res.data);
+    }
+
+    // ==========================================================
     
     } catch (error) {
       console.error('Prediction failed:', error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const saveToSupabase = async (data: any) => {
+    const userId = JSON.parse(localStorage.getItem('data')).id;
+    console.log('name is '+name)
+    await supabase.from('recent_predictions').insert({
+      age: formData.Age,
+      monthlyIncome: formData.MonthlyIncome,
+      yearsAtCompany: formData.YearsAtCompany,
+      yearsInCurrentRole: formData.YearsInCurrentRole,
+      yearsWithCurrentManager: formData.YearsWithCurrManager,
+      totalWorkingYears: formData.TotalWorkingYears,
+      jobLevel: formData.JobLevel,
+      jobInvolvement: formData.JobInvolvement,
+      jobSatisfaction: formData.JobSatisfaction,
+      environmentSatisfaction: formData.EnvironmentSatisfaction,
+      stockOptionLevel: formData.StockOptionLevel,
+      overtimeYes: formData.OverTime_Yes,
+      maritalStatusSingle: formData.MaritalStatus_Single,
+      businessTravelFrequently: formData.BusinessTravel_Travel_Frequently,
+      prediction: data.prediction == 'No Attrition' ? false : true,
+      probability:  data.attrition_risk_probability,
+
+      name: name, // Placeholder name
+      hr_user_id:userId,
+    })
+
+    console.log('save prediction ')
   }
 
   const handleReset = () => {
@@ -124,6 +162,14 @@ export default function PredictSinglePage() {
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {/* Personal Information */}
+               <FormInput
+                label="Name"
+                name="name"
+                type="text"
+                value={name}
+                onChange={(fieldName, value) => setName(value as string)}
+              />
+
               <FormInput
                 label="Age"
                 name="Age"

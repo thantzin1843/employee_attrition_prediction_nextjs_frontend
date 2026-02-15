@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 interface NavbarProps {
   userName?: string
@@ -23,7 +23,14 @@ export function Navbar({ userName = 'HR Admin' }: NavbarProps) {
     window.location.href = '/';
   }
 
-  const data = JSON.parse(localStorage.getItem('data') || '{}');
+  const [data, setData] = useState({username:''})
+
+  useEffect(() => {
+    const stored = localStorage.getItem('data')
+    if (stored) {
+      setData(JSON.parse(stored))
+    }
+  }, [])
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card shadow-sm">

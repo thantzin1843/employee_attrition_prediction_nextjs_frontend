@@ -1,10 +1,11 @@
 'use client'
 
-import { Users, UserMinus, TrendingUp, Activity } from 'lucide-react'
+import { Users, UserMinus, TrendingUp, Activity, Download } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 const stats = [
   {
@@ -46,6 +47,72 @@ const recentPredictions = [
 ]
 
 export default function DashboardPage() {
+  const [predictions, setPredictions] = useState<any>([]);
+  const [bulkPredictions, setBulkPredictions] = useState<any>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(()=>{
+    fetchPredictions();
+    // fetchBulkPredictions();
+
+  },[])
+  const fetchPredictions = async () => {
+    const { data, error } = await supabase
+      .from('recent_predictions')
+      .select('*')
+      .eq('hr_user_id', JSON.parse(localStorage.getItem('data')).id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error(error)
+    }
+    console.log(data)
+
+    setPredictions(data || [])
+  }
+
+   
+
+  useEffect(() => {
+    const fetchBulkPredictions = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("bulk_predictions_metadata")
+        .select("*")
+        .eq('hr_user_id', JSON.parse(localStorage.getItem('data')).id)
+        .order("created_at", { ascending: false }); // latest first
+
+      if (error) console.error("Fetch error:", error);
+      else setBulkPredictions(data);
+
+      setLoading(false);
+    };
+
+    fetchBulkPredictions();
+  }, []);
+
+   const handleDownload = async (filePath: string, fileName: string) => {
+    // generate public URL (public bucket) or signed URL (private)
+    const { data, error } = await supabase.storage
+      .from("bulk_predictions")
+      .createSignedUrl(filePath, 60); // 60 seconds
+
+    if (error) {
+      console.error("Download URL error:", error);
+      return;
+    }
+
+    if (data?.signedUrl) {
+      // trigger download
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
+
  
   return (
     <div className="space-y-6">
@@ -56,8 +123,45 @@ export default function DashboardPage() {
         </p>
       </div>
 
+       <Card className="border-border shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-foreground">Recent Predictions</CardTitle>
+          <CardDescription>
+            Latest employee attrition predictions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Files</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkPredictions.map((prediction:any) => (
+                  <tr key={prediction.id} className="border-b border-border last:border-0">
+                    <td className="py-3 text-sm font-medium text-foreground">{prediction.file_name}</td>
+                    <td className="py-3 text-sm text-muted-foreground">
+                      <button
+                        className="bg-blue-500 text-white px-3 py-1 rounded"
+                        onClick={() => handleDownload(prediction.file_path, prediction.file_name)}
+                      >
+                        Download
+                      </button>
+                    </td>
+                    
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title} className="border-border shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -76,7 +180,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         ))}
-      </div>
+      </div> */}
+
+      
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -123,26 +229,30 @@ export default function DashboardPage() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Employee</th>
-                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Department</th>
-                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Risk Level</th>
-                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Date</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Age</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Monthly Income</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Stock Option</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Years at Company</th>
+                  <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Attrition Status</th>
                 </tr>
               </thead>
               <tbody>
-                {recentPredictions.map((prediction) => (
+                {predictions.map((prediction:any) => (
                   <tr key={prediction.id} className="border-b border-border last:border-0">
                     <td className="py-3 text-sm font-medium text-foreground">{prediction.name}</td>
-                    <td className="py-3 text-sm text-muted-foreground">{prediction.department}</td>
-                    <td className="py-3">
+                    <td className="py-3 text-sm text-muted-foreground">{prediction.age}</td>
+                    <td className="py-3 text-sm text-muted-foreground">{prediction.monthlyIncome}</td>
+                     <td className="py-3 text-sm text-muted-foreground">{prediction.stockOptionLevel}</td>
+                    <td className="py-3 text-sm text-muted-foreground">{prediction.yearsAtCompany}</td>
+                     <td className="py-3">
                       <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                        prediction.risk === 'High'
-                          ? 'bg-destructive/10 text-destructive'
-                          : 'bg-success/10 text-success'
+                        prediction.prediction === false
+                          ? 'bg-success/10 text-success'
+                          : 'bg-destructive/10 text-destructive'
                       }`}>
-                        {prediction.risk} Risk
+                        {prediction.prediction === false ? 'No Attrition' : 'Attrition Risk'}
                       </span>
                     </td>
-                    <td className="py-3 text-sm text-muted-foreground">{prediction.date}</td>
                   </tr>
                 ))}
               </tbody>
